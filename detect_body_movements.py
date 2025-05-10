@@ -18,34 +18,36 @@ import os
 # On the other hand, if the std is between 15 and 2 * MAD of all time-windows SD,
 # there will be a uniform pressure to the mat. Then, we can analyze the sleep patterns
 
-def detect_patterns(pt1, pt2, win_size, data, time, plot):
-    # Create results directory if it doesn't exist
-    results_dir = os.path.join(os.path.dirname(os.path.abspath(_file_)), 'results')
+def detect_patterns(pt1, pt2, win_size, data, time, ecg_samples_per_window, plot):
+    # Create results directory
+    results_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'results')
     os.makedirs(results_dir, exist_ok=True)
 
-    # store start and end time point
-    pt1_ = pt1
-    pt2_ = pt2
+    # Store initial window points
+    pt1_, pt2_ = pt1, pt2
 
+    # Number of windows in BCG data
     limit = int(math.floor(data.size / win_size))
-    flag = np.zeros([data.size, 1])
-    event_flags = np.zeros([limit, 1])
+    flag = np.zeros(data.size)  # BCG flag array
+    event_flags = np.zeros(limit)  # Window classification
 
     segments_sd = []
 
-    for i in range(0, limit):
+    # Calculate standard deviation per window
+    pt1, pt2 = pt1_, pt2_
+    for i in range(limit):
         sub_data = data[pt1:pt2]
         segments_sd.append(np.std(sub_data, ddof=1))
         pt1 = pt2
         pt2 += win_size
 
-    mad = np.sum(np.abs(segments_sd - np.mean(segments_sd, axis=0))) / (1.0 * len(segments_sd))
-
+    # Compute Median Absolute Deviation (MAD)
+    mad = np.sum(np.abs(segments_sd - np.mean(segments_sd))) / len(segments_sd)
     thresh1, thresh2 = 15, 2 * mad
 
+    # Classify windows
     pt1, pt2 = pt1_, pt2_
-
-    for j in range(0, limit):
+    for j in range(limit):
         std_fos = np.around(segments_sd[j])
         if std_fos < thresh1:  # No-movement
             flag[pt1:pt2] = 3
@@ -53,66 +55,61 @@ def detect_patterns(pt1, pt2, win_size, data, time, plot):
         elif std_fos > thresh2:  # Movement
             flag[pt1:pt2] = 2
             event_flags[j] = 2
-        else:
-            flag[pt1:pt2] = 1  # Sleeping
+        else:  # Sleeping
+            flag[pt1:pt2] = 1
             event_flags[j] = 1
         pt1 = pt2
         pt2 += win_size
 
-    pt1, pt2 = pt1_, pt2_
+    # BCG mask: True for sleeping periods
+    bcg_mask = (flag == 1)
 
-    # Function to highlight activities
-    data_for_plot = data
-    width = np.min(data_for_plot)
-    if width < 0:
-        height = np.max(data_for_plot) + np.abs(width)
-    else:
-        height = np.max(data_for_plot)
+    # Expected ECG size based on BCG length
+    expected_ecg_size = math.ceil(data.size / 50)
+    ecg_mask = np.zeros(expected_ecg_size, dtype=bool)
 
+    # Map BCG windows to ECG samples
+    for j in range(limit):
+        if event_flags[j] == 1:  # Sleeping
+            ecg_start = j * ecg_samples_per_window
+            ecg_end = ecg_start + ecg_samples_per_window
+            # Ensure we don't exceed ECG array bounds
+            ecg_end = min(ecg_end, expected_ecg_size)
+            ecg_mask[ecg_start:ecg_end] = True
+
+    filtered_data = data[bcg_mask]
+    filtered_time = time[bcg_mask]
+
+    # Plotting (if enabled)
     if plot == 1:
-        # fig = plt.figure()
-        current_axis = plt.gca()
-        plt.plot(np.arange(0, data.size), data_for_plot, '-k', linewidth=1)
-        plt.xlabel('Time [Samples]')
-        plt.ylabel('Amplitude [mV]')
-        plt.gcf().autofmt_xdate()
-
-    for j in range(0, limit):
-        sub_data = data_for_plot[pt1:pt2]
-        sub_time = np.arange(pt1, pt2)/50
-        if event_flags[j] == 3:  # No-movement
-            if plot == 1:
-                plt.plot(sub_time, sub_data, '-k', linewidth=1)
-                current_axis.add_patch(
-                    Rectangle((pt1, width), win_size, height, facecolor="#FAF0BE", alpha=.2))
-        elif event_flags[j] == 2:  # Movement
-            if plot == 1:
-                plt.plot(sub_time, sub_data, '-k', linewidth=1)
-                current_axis.add_patch(
-                    Rectangle((pt1, width), win_size, height, facecolor="#FF004F", alpha=1.0))
-        else:  # Sleeping
-            if plot == 1:
-                plt.plot(sub_time, sub_data, '-k', linewidth=1)
-                current_axis.add_patch(
-                    Rectangle((pt1, width), win_size, height, facecolor="#00FFFF", alpha=.2))
-        pt1 = pt2
-        pt2 += win_size
-
-    if plot:
+        data_for_plot = data
+        width = np.min(data_for_plot)
+        height = np.max(data_for_plot) - width if width < 0 else np.max(data_for_plot)
+        
         plt.figure(figsize=(12, 6))
-        plt.plot(time[pt1_:pt2_], data[pt1_:pt2_])
-        plt.xlabel('Time (s)')
-        plt.ylabel('Amplitude')
-        plt.title('Raw Data')
+        current_axis = plt.gca()
+        plt.plot(np.arange(0, data.size)/50, data_for_plot, '-k', linewidth=1)
+        plt.xlabel('Time [s]')
+        plt.ylabel('Amplitude [mV]')
+
+        pt1, pt2 = pt1_, pt2_
+        for j in range(limit):
+            sub_time = np.arange(pt1, pt2)/50
+            if event_flags[j] == 3:  # No-movement
+                current_axis.add_patch(
+                    Rectangle((pt1/50, width), win_size/50, height, facecolor="#FAF0BE", alpha=0.2))
+            elif event_flags[j] == 2:  # Movement
+                current_axis.add_patch(
+                    Rectangle((pt1/50, width), win_size/50, height, facecolor="#FF004F", alpha=1.0))
+            else:  # Sleeping
+                current_axis.add_patch(
+                    Rectangle((pt1/50, width), win_size/50, height, facecolor="#00FFFF", alpha=0.2))
+            pt1 = pt2
+            pt2 += win_size
+
         plt.grid(True)
+        plt.title('Raw BCG Data with Patterns')
         plt.savefig(os.path.join(results_dir, 'rawData.png'))
         plt.close()
 
-    # Remove Body Movements and bed-empty activities
-    ind2remove = np.sort(np.append(np.where(event_flags == 3), np.where(event_flags == 2)), axis=None)
-    mask = np.ones(data.size, dtype=bool)
-    mask[ind2remove] = False
-    filtered_data = data[mask]
-    filtered_time = time[mask]
-
-    return filtered_data, filtered_time
+    return filtered_data, filtered_time, bcg_mask, ecg_mask
