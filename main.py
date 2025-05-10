@@ -26,8 +26,8 @@ from ecgdetectors import Detectors
 # Main program starts here
 print('\nstart processing ...')
 
-file = 'bcg_syncd_Human.csv'
-ecg_df = pd.read_csv('ecg_synced_data_with_epoch.csv')
+file = '01_20231105_BCG.csv'
+ecg_df = pd.read_csv('01_20231105_RR.csv')
 
 if file.endswith(".csv"):
     fileName = os.path.join(file)
