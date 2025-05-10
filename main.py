@@ -1,3 +1,9 @@
+from rr import add_epoch_column
+import sync
+import resample
+from change import change_format
+import generate
+import run
 
 import math
 import os
@@ -37,7 +43,8 @@ if file.endswith(".csv"):
         #---------------------------Resampled------------------------------------
         #---------------------------Sync-----------------------------------------
         #---------------------------Change Formats-------------------------------
-
+        ecg_df = add_epoch_column(ecg_df)
+        bcg_df = change_format(bcg_df)
         # Extract series
         bcg_data = bcg_df['amplitude'].values
         bcg_time = bcg_df['Timestamp'].values
