@@ -7,7 +7,7 @@ def sync_ecg_bcg_dfs(
     bcg_df: pd.DataFrame,
     fs: int = 50,
     ecg_tz_offset_hours: int = -2
-) -> (pd.DataFrame, pd.DataFrame):
+) -> (pd.DataFrame, pd.DataFrame): # type: ignore
     """
     Synchronize ECG (per-second RR/HR) and BCG (fs Hz) DataFrames.
 
