@@ -27,7 +27,7 @@ from scipy.signal import medfilt
 from scipy.signal import correlate
 from scipy.signal import resample
 from ecgdetectors import Detectors
-
+from synchronization import sync_ecg_bcg_dfs
 
 # Main program starts here
 print('\nstart processing ...')
@@ -42,6 +42,7 @@ if file.endswith(".csv"):
         #---------------------------Generate CSV------------------------------------
         #---------------------------Resampled------------------------------------
         #---------------------------Sync-----------------------------------------
+        ecg_df,bcg_df=sync_ecg_bcg_dfs(ecg_df,bcg_df)
         #---------------------------Change Formats-------------------------------
         ecg_df = add_epoch_column(ecg_df)
         bcg_df = change_format(bcg_df)
