@@ -31,7 +31,10 @@ if file.endswith(".csv"):
     fileName = os.path.join(file)
     if os.stat(fileName).st_size != 0:
         bcg_df = pd.read_csv(fileName)
-        
+        #---------------------------Generate CSV------------------------------------
+        #---------------------------Resampled------------------------------------
+        #---------------------------Sync-----------------------------------------
+        #---------------------------Change Formats-------------------------------
 
         # Extract series
         bcg_data = bcg_df['amplitude'].values
