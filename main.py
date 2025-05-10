@@ -28,6 +28,7 @@ from scipy.signal import correlate
 from scipy.signal import resample
 from ecgdetectors import Detectors
 from synchronization import sync_ecg_bcg_dfs
+from resample import resample_bcg_df
 
 # Main program starts here
 print('\nstart processing ...')
@@ -41,6 +42,7 @@ if file.endswith(".csv"):
         bcg_df = pd.read_csv(fileName)
         #---------------------------Generate CSV------------------------------------
         #---------------------------Resampled------------------------------------
+        bcg_df = resample.resample_bcg_df(bcg_df, original_fs=140, target_fs=50)
         #---------------------------Sync-----------------------------------------
         ecg_df,bcg_df=sync_ecg_bcg_dfs(ecg_df,bcg_df)
         #---------------------------Change Formats-------------------------------
