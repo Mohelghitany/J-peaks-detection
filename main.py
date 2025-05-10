@@ -1,3 +1,9 @@
+import rr
+import sync
+import resample
+import change
+import generate
+import run
 import math
 import os
 import numpy as np
@@ -20,6 +26,7 @@ from scipy.signal import medfilt
 from scipy.signal import correlate
 from scipy.signal import resample
 from ecgdetectors import Detectors
+
 
 # Main program starts here
 print('\nstart processing ...')
