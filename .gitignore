@@ -1,1 +1,8 @@
 dataset/
+01_20231105_BCG_time.csv
+01_20231105_BCG.csv
+01_20231105_RR.csv
+bcg_synced.csv
+ecg_synced.csv
+output_with_epoch.csv
+resampled_01_20231105_BCG_time_50Hz.csv
