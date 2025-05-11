@@ -23,7 +23,7 @@ from scipy.signal import medfilt
 from scipy.signal import correlate
 from scipy.signal import resample
 from ecgdetectors import Detectors
-from Resample_Sync import sync_ecg_bcg_dfs
+from Resample_Sync import Resample_sync
 from resample import resample_bcg_df
 
 # Main program starts here
