@@ -19,6 +19,7 @@ from scipy.signal import medfilt
 from scipy.signal import correlate
 from scipy.signal import resample
 from sklearn.metrics import mean_absolute_error
+import seaborn as sns
 
 def compute_rate(signal, fs, window_sec, shift_sec, min_peak_dist_sec):
     """
@@ -196,6 +197,43 @@ if file.endswith(".csv"):
         # Plot Vitals Example
         t1, t2 = 2500, 2500 * 2
         data_subplot(data_stream, movement, breathing, wavelet_cycle, t1, t2)
+        
+        # 1. Bland-Altman Plot
+        mean_hr = (hr_bcg + hr_ecg) / 2
+        diff_hr = hr_bcg - hr_ecg
+        mean_diff = np.mean(diff_hr)
+        std_diff = np.std(diff_hr)
+        loa_upper = mean_diff + 1.96 * std_diff
+        loa_lower = mean_diff - 1.96 * std_diff
+        plt.figure(figsize=(7, 5))
+        plt.scatter(mean_hr, diff_hr, alpha=0.6)
+        plt.axhline(mean_diff, color='gray', linestyle='--', label=f'Mean diff: {mean_diff:.2f}')
+        plt.axhline(loa_upper, color='red', linestyle='--', label=f'+1.96 SD: {loa_upper:.2f}')
+        plt.axhline(loa_lower, color='blue', linestyle='--', label=f'-1.96 SD: {loa_lower:.2f}')
+        plt.xlabel('Mean HR (bpm)')
+        plt.ylabel('Difference (BCG - ECG) (bpm)')
+        plt.title('Bland-Altman Plot')
+        plt.legend()
+        plt.tight_layout()
+        plt.show()
+
+        # 2. Pearson Correlation Plot
+        plt.figure(figsize=(7, 5))
+        sns.regplot(x=hr_ecg, y=hr_bcg, ci=None, scatter_kws={'alpha':0.6})
+        plt.xlabel('Reference HR (ECG, bpm)')
+        plt.ylabel('Estimated HR (BCG, bpm)')
+        plt.title(f'Pearson Correlation: r = {corr:.3f}')
+        plt.tight_layout()
+        plt.show()
+
+        # 3. Boxplot
+        plt.figure(figsize=(7, 5))
+        data = [hr_ecg, hr_bcg]
+        plt.boxplot(data, labels=['Reference HR (ECG)', 'Estimated HR (BCG)'])
+        plt.ylabel('Heart Rate (bpm)')
+        plt.title('Boxplot of HR Estimates')
+        plt.tight_layout()
+        plt.show()
         # ==============================================================================================================
     print('\nEnd processing ...')
     # ==================================================================================================================
