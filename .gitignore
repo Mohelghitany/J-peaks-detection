@@ -6,3 +6,5 @@ bcg_synced.csv
 ecg_synced.csv
 output_with_epoch.csv
 resampled_01_20231105_BCG_time_50Hz.csv
+ecg_synced_data_with_epoch.csv
+bcg_syncd_Human.csv
