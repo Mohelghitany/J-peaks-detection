@@ -1,68 +1,103 @@
-import math
-from datetime import datetime, timedelta
 import pandas as pd
+import numpy as np
+from datetime import datetime, timedelta
+import math
 
-def sync_ecg_bcg_dfs(
-    ecg_df: pd.DataFrame,
-    bcg_df: pd.DataFrame,
-    fs: int = 50,
-    ecg_tz_offset_hours: int = -2
+
+def read_ecg(ecg_path: str, utc_offset_hours: float = 2):
+    """
+    Read ECG CSV and return list of (second, heart_rate, rr_interval, orig_timestamp_str).
+    Converts local time (UTC-offset) to UTC and deduplicates by second.
+    """
+    ecg_data = []
+    with open(ecg_path, 'r') as f:
+        next(f)
+        for line in f:
+            ts_str, hr_str, rr_str = line.strip().split(',')
+            dt_local = datetime.strptime(ts_str, "%Y/%m/%d %H:%M:%S")
+            dt_utc = dt_local + timedelta(hours=utc_offset_hours)
+            sec = int(dt_utc.timestamp())
+            ecg_data.append((sec, int(hr_str), float(rr_str), ts_str))
+    # Dedupe: keep first per second
+    seen = {}
+    for entry in ecg_data:
+        if entry[0] not in seen:
+            seen[entry[0]] = entry
+    return sorted(seen.values(), key=lambda x: x[0])
+
+
+def read_bcg_raw(bcg_path: str, fs_target: int = 50):
+    """
+    Read raw BCG CSV, parse initial timestamp and raw fs, then resample to fs_target Hz.
+    """
+    with open(bcg_path, 'r') as f:
+        f.readline()
+        hdr = f.readline().strip().split(',')
+    ts_offset = int(hdr[1]) / 1000.0
+    fs_raw = float(hdr[2])
+    df = pd.read_csv(bcg_path, skiprows=2, header=None, names=['amplitude'])
+
+    raw = df['amplitude'].values
+    t_raw = ts_offset + np.arange(len(raw)) / fs_raw
+    # New uniform grid
+    t_new = np.arange(math.ceil(t_raw[0] * fs_target) / fs_target,
+                      math.floor(t_raw[-1] * fs_target) / fs_target + 1e-6,
+                      1.0/fs_target)
+    amp_new = np.interp(t_new, t_raw, raw)
+    # Format list
+    return [(float(t), float(a), int(t)) for t, a in zip(t_new, amp_new)]
+
+
+def sync_data(ecg_data, bcg_data, fs: int = 50):
+    """
+    Align ECG and BCG so that math.ceil(len(bcg)/fs) == len(ecg).
+    Trims start/end timestamps at whole-second boundaries.
+    """
+    # Determine overlapping seconds
+    ecg_secs = [e[0] for e in ecg_data]
+    bcg_secs = [b[2] for b in bcg_data]
+    start = max(min(ecg_secs), min(bcg_secs))
+    end = min(max(ecg_secs), max(bcg_secs))
+
+    # Trim by second window
+    ecg_trim = [e for e in ecg_data if start <= e[0] <= end]
+    bcg_trim = [b for b in bcg_data if start <= b[2] <= end]
+
+    # Compute desired ECG count from trimmed BCG
+    n_bcg = len(bcg_trim)
+    desired_ecg = math.ceil(n_bcg / fs)
+    # Trim ECG to match desired count
+    ecg_out = ecg_trim[:desired_ecg]
+    # Recompute BCG desired length
+    desired_bcg = len(ecg_out) * fs
+    bcg_out = bcg_trim[:desired_bcg]
+
+    # Final check
+    assert math.ceil(len(bcg_out)/fs) == len(ecg_out), \
+        f"Sync failed: ceil({len(bcg_out)}/{fs}) != {len(ecg_out)}"
+    return ecg_out, bcg_out
+
+
+def save_synced(ecg_data, bcg_data, ecg_out: str, bcg_out: str):
+    with open(ecg_out, 'w') as f:
+        f.write("Timestamp,Heart Rate,RR Interval in seconds\n")
+        for _, hr, rr, ts in ecg_data:
+            f.write(f"{ts},{hr},{rr}\n")
+    with open(bcg_out, 'w') as f:
+        f.write("Timestamp,amplitude\n")
+        for ts, amp, _ in bcg_data:
+            f.write(f"{ts},{amp}\n")
+
+
+def Resample_sync(
+    ecg: pd.DataFrame,
+    bcg: pd.DataFrame,
+    
 ) -> (pd.DataFrame, pd.DataFrame): # type: ignore
-    """
-    Synchronize ECG (per-second RR/HR) and BCG (fs Hz) DataFrames.
+    
 
-    Parameters:
-    - ecg_df: DataFrame with columns ['Timestamp','Heart Rate','RR Interval in seconds'], Timestamp format "%Y/%m/%d %H:%M:%S" in local time.
-    - bcg_df: DataFrame with columns ['Timestamp','amplitude'], Timestamp as float seconds (unix time).
-    - fs: sampling frequency of BCG (default 50 Hz).
-    - ecg_tz_offset_hours: local timezone offset from UTC for ECG timestamps (default -2 means local = UTC-2).
+   
+    ecg_sync, bcg_sync = sync_data(ecg, bcg, fs=50)
+    return ecg_sync, bcg_sync
 
-    Returns:
-    - synced_ecg: DataFrame indexed by int-second UTC, length = ceil(len(synced_bcg)/fs).
-    - synced_bcg: DataFrame indexed by original BCG timestamp, filtered to only seconds present in ECG and trimmed length.
-    """
-    # Copy inputs
-    ecg = ecg_df.copy()
-    bcg = bcg_df.copy()
-
-    # --- Process ECG ---
-    # parse local Timestamp, convert to UTC unix seconds
-    ecg['dt_local'] = pd.to_datetime(ecg['Timestamp'], format="%Y/%m/%d %H:%M:%S")
-    ecg['dt_utc'] = ecg['dt_local'] - pd.to_timedelta(ecg_tz_offset_hours, unit='h')
-    ecg['unix'] = ecg['dt_utc'].astype('int64') // 1_000_000_000
-    # floor to second and drop duplicates, keep first
-    ecg['sec'] = ecg['unix'].astype(int)
-    ecg = ecg.drop_duplicates(subset='sec', keep='first')
-    ecg = ecg.set_index('sec')
-
-    # --- Process BCG ---
-    # floor BCG timestamp to second
-    bcg['sec'] = bcg['Timestamp'].astype(float).astype(int)
-    # filter to ECG seconds
-    bcg = bcg[bcg['sec'].isin(ecg.index)]
-
-    # --- Align lengths ---
-    n_ecg = len(ecg)
-    n_bcg = len(bcg)
-    target_ecg = n_bcg // fs
-    if n_ecg > target_ecg:
-        # trim ECG
-        ecg = ecg.iloc[:target_ecg]
-        # re-filter BCG
-        bcg = bcg[bcg['sec'].isin(ecg.index)]
-    elif n_ecg < target_ecg:
-        # trim BCG
-        bcg = bcg.iloc[:n_ecg * fs]
-        # re-filter ECG
-        secs = bcg['sec'].unique()
-        ecg = ecg.loc[ecg.index.intersection(secs)]
-
-    # final sanity check
-    assert len(ecg) == math.ceil(len(bcg)/fs), \
-        f"Lengths mismatch: ECG={len(ecg)}, BCG/fs={len(bcg)/fs}"
-
-    # prepare return DataFrames
-    synced_ecg = ecg[['Timestamp','Heart Rate','RR Interval in seconds']].reset_index(drop=True)
-    synced_bcg = bcg[['Timestamp','amplitude']].reset_index(drop=True)
-    return synced_ecg, synced_bcg
 
