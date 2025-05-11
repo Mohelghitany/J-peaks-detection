@@ -19,7 +19,8 @@ from scipy.signal import medfilt
 from scipy.signal import correlate
 from scipy.signal import resample
 from sklearn.metrics import mean_absolute_error
-
+from Resample_Sync import Resample_sync
+from rr import add_epoch_column
 def compute_rate(signal, fs, window_sec, shift_sec, min_peak_dist_sec):
     """
     Slide a window through 'signal', detect peaks in each window, 
@@ -80,19 +81,27 @@ def compute_ref_hr(ecg_hr, fs, window_sec, shift_sec):
 # Main program starts here
 print('\nstart processing ...')
 
-file = 'bcg_syncd_Human.csv'
-ecg_df = pd.read_csv('ecg_synced_data_with_epoch.csv')
+bcg_f = '01_20231105_BCG.csv'
+ecg_f = '01_20231105_RR.csv'
 
 
 
-if file.endswith(".csv"):
-    fileName = os.path.join(file)
+if bcg_f.endswith(".csv"):
+    fileName = os.path.join(bcg_f)
     if os.stat(fileName).st_size != 0:
-        bcg_df = pd.read_csv(fileName)
+        
+        ecg_df,bcg_df=Resample_sync(ecg_f,bcg_f)
+        
+        
+        ecg_df=add_epoch_column(ecg_df)
+        bcg_df=pd.read_csv(bcg_df)
+        print(ecg_df.head())
+        
+
 
         bcg_data = bcg_df['amplitude'].values
-        bcg_time = bcg_df['Timestamp'].values
-        ecg_data = ecg_df['Heart Rate'].values  # RR intervals in ms
+        bcg_time = bcg_df['timestamp'].values
+        ecg_data = ecg_df['HR'].values  # RR intervals in ms
         ecg_time = ecg_df['Epoch'].values
 
         start_point, end_point, window_shift, fs = 0, 500, 500, 50

@@ -1,7 +1,7 @@
 import pandas as pd
 from datetime import datetime
 
-def add_epoch_column(df: pd.DataFrame, ts_format: str = '%Y/%m/%d %H:%M:%S') -> pd.DataFrame:
+def add_epoch_column(df, ts_format: str = '%Y/%m/%d %H:%M:%S') -> pd.DataFrame:
     """
     Takes a DataFrame with a 'Timestamp' column (as strings),
     parses it to datetime using ts_format, adds an 'Epoch' column (int seconds since epoch),
@@ -19,6 +19,7 @@ def add_epoch_column(df: pd.DataFrame, ts_format: str = '%Y/%m/%d %H:%M:%S') -> 
     pd.DataFrame
         A new DataFrame with an added 'Epoch' column.
     """
+    df=pd.read_csv(df)
     df_out = df.copy()
     # Parse the Timestamp strings to datetime
     df_out['Timestamp'] = pd.to_datetime(df_out['Timestamp'], format=ts_format)
